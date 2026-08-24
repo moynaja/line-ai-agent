@@ -1,0 +1,45 @@
+services:
+  - type: web
+    name: pj-linebot
+    runtime: python
+    plan: free
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.7
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: LINE_CHANNEL_SECRET
+        sync: false
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash
+      - key: KLIVE_API_URL
+        value: https://tasks.dohome.technology/api
+      - key: KLIVE_TASKS_API_URL
+        value: https://tasks.dohome.technology/api
+      - key: KLIVE_API_TOKEN
+        sync: false
+      - key: SELF_EMAIL
+        value: wirun.pin@dohome.co.th
+      - key: ADMIN_LINE_USER_ID
+        sync: false
+      - key: LIFF_ID
+        sync: false
+      - key: LIFF_PROJECT_ID
+        sync: false
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/firestore-key.json
+      - key: FIRESTORE_PROJECT_ID
+        sync: false
+      - key: FIRESTORE_COLLECTION
+        value: bot_users
+      - key: CRON_SECRET
+        sync: false

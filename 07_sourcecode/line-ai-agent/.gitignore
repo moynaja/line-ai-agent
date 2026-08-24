@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+.env
+.DS_Store
+
+# Firestore service account keys — never commit these
+*firestore*key*.json
+serviceAccount*.json

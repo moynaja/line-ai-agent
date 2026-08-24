@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ภาพรวมโปรเจกต์ — Greenman</title>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  :root { --brand: #06C755; --muted: #9CA3AF; --ink: #1F2937; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, sans-serif;
+    background: #F3F4F6;
+    margin: 0; color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  #loading, #error {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    text-align: center; padding: 24px; color: #555; font-size: 15px;
+  }
+  #error { display: none; color: #c62828; }
+  #app { display: none; }
+
+  .header {
+    padding: 24px 20px 28px;
+    color: #FFFFFF;
+  }
+  .header .eyebrow { display: flex; align-items: center; justify-content: space-between; font-size: 13px; opacity: 0.9; }
+  .header .title { font-size: 22px; font-weight: 700; margin: 10px 0 4px; line-height: 1.3; }
+  .header .badge-line { font-size: 13px; margin-top: 4px; opacity: 0.95; }
+  .header .bar-track { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.35); margin-top: 14px; overflow: hidden; }
+  .header .bar-fill { height: 100%; background: #FFFFFF; }
+  .header .bar-pct { font-size: 12px; text-align: right; margin-top: 4px; opacity: 0.9; }
+
+  .content { padding: 16px; max-width: 720px; margin: 0 auto; }
+  .section { background: #FFFFFF; border-radius: 14px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .section h3 { margin: 0 0 12px; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .meta-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+  .meta-row .label { color: var(--muted); }
+  .desc { font-size: 13px; color: #555; margin-top: 10px; line-height: 1.6; white-space: pre-wrap; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  @media (min-width: 480px) { .stat-grid { grid-template-columns: repeat(4, 1fr); } }
+  .stat-card { background: #F9FAFB; border-radius: 10px; padding: 12px 8px; text-align: center; }
+  .stat-card .value { font-size: 20px; font-weight: 700; }
+  .stat-card .label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .breakdown-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
+  .breakdown-bar span { height: 100%; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #555; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 4px; flex-shrink: 0; }
+
+  .workload-row { margin-bottom: 12px; }
+  .workload-row:last-child { margin-bottom: 0; }
+  .workload-top { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; gap: 8px; }
+  .workload-top .name { font-weight: 600; }
+  .workload-top .breakdown { color: var(--muted); font-size: 11px; text-align: right; }
+  .mini-bar-track { height: 6px; border-radius: 3px; background: #E5E7EB; overflow: hidden; }
+  .mini-bar-fill { height: 100%; background: var(--brand); }
+
+  .milestone-card { background: #F9FAFB; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+  .milestone-card:last-child { margin-bottom: 0; }
+  .milestone-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .milestone-top .name { font-weight: 600; font-size: 14px; }
+  .milestone-top .status { font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .milestone-due { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .task-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F3F4F6; }
+  .task-row:last-child { border-bottom: none; }
+  .task-bar { width: 4px; align-self: stretch; border-radius: 2px; flex-shrink: 0; }
+  .task-main { flex: 1; min-width: 0; }
+  .task-title { font-size: 13px; font-weight: 500; }
+  .task-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .task-due { font-size: 11px; color: var(--muted); text-align: right; flex-shrink: 0; }
+
+  .empty { font-size: 13px; color: var(--muted); padding: 4px 0; }
+  .footer-note { text-align: center; font-size: 11px; color: var(--muted); padding: 8px 0 24px; }
+</style>
+</head>
+<body>
+  <div id="loading">กำลังโหลดข้อมูลโปรเจกต์...</div>
+  <div id="error"></div>
+
+  <div id="app">
+    <div class="header" id="header">
+      <div class="eyebrow"><span id="friendlyId"></span><span id="statusLabel"></span></div>
+      <div class="title" id="projectName"></div>
+      <div class="badge-line" id="badgeText"></div>
+      <div class="badge-line" id="nextMilestoneText"></div>
+      <div class="bar-track"><div class="bar-fill" id="progressFill" style="width:0%"></div></div>
+      <div class="bar-pct" id="progressPct"></div>
+    </div>
+
+    <div class="content">
+      <div class="section" id="metaSection">
+        <h3>ข้อมูลโปรเจกต์</h3>
+        <div class="meta-row"><span class="label">เริ่ม</span><span id="startDate"></span></div>
+        <div class="meta-row"><span class="label">สิ้นสุด</span><span id="endDate"></span></div>
+        <div class="meta-row"><span class="label">สมาชิก</span><span id="memberCount"></span></div>
+        <div class="desc" id="description" style="display:none;"></div>
+      </div>
+
+      <div class="section">
+        <h3>ภาพรวม</h3>
+        <div class="stat-grid" id="statGrid"></div>
+      </div>
+
+      <div class="section" id="breakdownSection">
+        <h3>สถานะงาน</h3>
+        <div class="breakdown-bar" id="breakdownBar"></div>
+        <div class="legend" id="breakdownLegend"></div>
+      </div>
+
+      <div class="section">
+        <h3>ภาระงานทีม</h3>
+        <div id="workloadList"></div>
+      </div>
+
+      <div class="section">
+        <h3>ความคืบหน้า Milestone</h3>
+        <div id="milestoneList"></div>
+      </div>
+
+      <div class="section">
+        <h3>งานที่เลยกำหนด</h3>
+        <div id="overdueList"></div>
+      </div>
+
+      <div class="section">
+        <h3>งานที่ครบกำหนดสัปดาห์นี้</h3>
+        <div id="dueThisWeekList"></div>
+      </div>
+
+      <div class="footer-note">Greenman · dh-task</div>
+    </div>
+  </div>
+
+<script>
+function qs(id) { return document.getElementById(id); }
+
+function showError(msg) {
+  qs('loading').style.display = 'none';
+  const el = qs('error');
+  el.style.display = 'flex';
+  el.innerText = msg;
+}
+
+function statCard(label, value, color) {
+  const div = document.createElement('div');
+  div.className = 'stat-card';
+  div.innerHTML = `<div class="value" style="color:${color}">${value}</div><div class="label">${label}</div>`;
+  return div;
+}
+
+function renderBreakdown(items) {
+  const bar = qs('breakdownBar');
+  const legend = qs('breakdownLegend');
+  const section = qs('breakdownSection');
+  if (!items.length) { section.style.display = 'none'; return; }
+  const total = items.reduce((s, i) => s + i.count, 0);
+  bar.innerHTML = items.map(i => `<span style="width:${(100 * i.count / total).toFixed(2)}%;background:${i.color}"></span>`).join('');
+  legend.innerHTML = items.map(i => `
+    <div class="legend-item"><span class="legend-dot" style="background:${i.color}"></span>${i.label} ${i.count}</div>
+  `).join('');
+}
+
+function renderWorkload(entries) {
+  const el = qs('workloadList');
+  if (!entries.length) { el.innerHTML = '<div class="empty">ยังไม่มีงานที่มอบหมาย</div>'; return; }
+  el.innerHTML = entries.map(e => `
+    <div class="workload-row">
+      <div class="workload-top">
+        <span class="name">${e.name}</span>
+        <span class="breakdown">เสร็จ ${e.done} • กำลังทำ ${e.active} • รอ ${e.pending}</span>
+      </div>
+      <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${e.pct}%"></div></div>
+    </div>
+  `).join('');
+}
+
+function renderMilestones(items) {
+  const el = qs('milestoneList');
+  if (!items.length) { el.innerHTML = '<div class="empty">ยังไม่มี Milestone</div>'; return; }
+  el.innerHTML = items.map(m => `
+    <div class="milestone-card">
+      <div class="milestone-top">
+        <span class="name">${m.name}</span>
+        <span class="status" style="color:${m.color}">${m.status_label}</span>
+      </div>
+      ${m.progress !== null && m.progress !== undefined ? `
+        <div class="mini-bar-track" style="margin-top:6px;"><div class="mini-bar-fill" style="width:${m.progress}%;background:${m.color}"></div></div>
+      ` : ''}
+      <div class="milestone-due">กำหนดเสร็จ: ${m.due_date}</div>
+    </div>
+  `).join('');
+}
+
+function renderTasks(elId, items, emptyText) {
+  const el = qs(elId);
+  if (!items.length) { el.innerHTML = `<div class="empty">${emptyText}</div>`; return; }
+  el.innerHTML = items.map(t => `
+    <div class="task-row">
+      <div class="task-bar" style="background:${t.color}"></div>
+      <div class="task-main">
+        <div class="task-title">${t.title}</div>
+        <div class="task-sub">${t.assignee}${t.status_label ? ' • ' + t.status_label : ''}</div>
+      </div>
+      <div class="task-due">${t.due_date}</div>
+    </div>
+  `).join('');
+}
+
+function render(data) {
+  const p = data.project;
+  qs('header').style.background = p.status_color;
+  qs('friendlyId').innerText = p.friendly_id;
+  qs('statusLabel').innerText = p.status_label;
+  qs('projectName').innerText = p.name;
+  qs('badgeText').innerText = p.badge_text;
+  qs('nextMilestoneText').innerText = p.next_milestone_text || '';
+  qs('nextMilestoneText').style.display = p.next_milestone_text ? 'block' : 'none';
+  qs('progressFill').style.width = p.overall_progress + '%';
+  qs('progressPct').innerText = p.overall_progress + '%';
+
+  qs('startDate').innerText = p.start_date;
+  qs('endDate').innerText = p.end_date;
+  qs('memberCount').innerText = p.member_count + ' คน';
+  if (p.description) {
+    qs('description').style.display = 'block';
+    qs('description').innerText = p.description;
+  }
+
+  const s = data.stats;
+  const grid = qs('statGrid');
+  grid.appendChild(statCard('งานทั้งหมด', `${s.task_done}/${s.task_total}`, '#374151'));
+  grid.appendChild(statCard('Milestone', `${s.milestone_done}/${s.milestone_total}`, '#374151'));
+  grid.appendChild(statCard('รอดำเนินการ', s.pending, '#3B82F6'));
+  grid.appendChild(statCard('เลยกำหนด', s.overdue_count, s.overdue_count ? '#EF4444' : '#06C755'));
+
+  renderBreakdown(data.status_breakdown);
+  renderWorkload(data.workload);
+  renderMilestones(data.milestones);
+  renderTasks('overdueList', data.overdue_tasks, 'ไม่มีงานที่เลยกำหนด');
+  renderTasks('dueThisWeekList', data.due_this_week_tasks, 'ไม่มีงานที่ครบกำหนดในสัปดาห์นี้');
+
+  qs('loading').style.display = 'none';
+  qs('app').style.display = 'block';
+}
+
+async function main() {
+  let liffId;
+  try {
+    const cfgRes = await fetch('/api/liff/project-config');
+    const cfg = await cfgRes.json();
+    liffId = cfg.liff_id;
+  } catch (e) {
+    showError('เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ กรุณาลองใหม่อีกครั้งครับ');
+    return;
+  }
+  if (!liffId) {
+    showError('ยังไม่ได้ตั้งค่า LIFF_PROJECT_ID บนเซิร์ฟเวอร์ครับ');
+    return;
+  }
+
+  try {
+    await liff.init({ liffId });
+    if (!liff.isLoggedIn()) {
+      liff.login();
+      return;
+    }
+  } catch (e) {
+    showError('เริ่มต้น LIFF ไม่สำเร็จ กรุณาเปิดลิงก์นี้จากแอป LINE ครับ');
+    return;
+  }
+
+  // Only safe to read the URL's query string *after* liff.init() has
+  // resolved — LINE's redirect dance (LIFF URL -> primary redirect, where
+  // any extra path/query gets wrapped into a "liff.state" param -> secondary
+  // redirect, where it's unwrapped back onto the real URL) means project_id
+  // isn't reliably present on location.search until init() has settled.
+  // Reading it any earlier was the bug that made every open of this page
+  // report a missing project_id.
+  const params = new URLSearchParams(location.search);
+  const projectId = params.get('project_id');
+  if (!projectId) {
+    showError('ไม่พบรหัสโปรเจกต์ในลิงก์นี้ครับ กรุณาเปิดผ่านปุ่ม "ดูเว็บเต็มจอ" ในแชทอีกครั้ง');
+    return;
+  }
+
+  let userId;
+  try {
+    const profile = await liff.getProfile();
+    userId = profile.userId;
+  } catch (e) {
+    showError('ดึงข้อมูลผู้ใช้ LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้งครับ');
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/project-dashboard/${encodeURIComponent(projectId)}?user_id=${encodeURIComponent(userId)}`);
+    if (res.status === 403) {
+      showError('บัญชี LINE นี้ยังไม่ได้รับอนุมัติให้ใช้งาน Greenman ครับ');
+      return;
+    }
+    if (res.status === 404) {
+      showError('ไม่พบข้อมูลโปรเจกต์นี้ครับ');
+      return;
+    }
+    if (!res.ok) {
+      showError('ดึงข้อมูลโปรเจกต์ไม่สำเร็จ กรุณาลองใหม่อีกครั้งครับ');
+      return;
+    }
+    const data = await res.json();
+    render(data);
+  } catch (e) {
+    showError('เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้งครับ');
+  }
+}
+
+main();
+</script>
+</body>
+</html>

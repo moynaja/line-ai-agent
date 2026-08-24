@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Greenman Rich Menu Generator</title>
+<style>
+  body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #f4f4f4; text-align: center; padding: 40px; }
+  canvas { border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,0.15); width: 900px; max-width: 90vw; }
+  button {
+    margin-top: 24px; padding: 14px 32px; font-size: 18px; font-weight: 600;
+    background: #2E7D32; color: white; border: none; border-radius: 10px; cursor: pointer;
+  }
+  button:hover { background: #256428; }
+  p.note { color: #666; font-size: 14px; margin-top: 12px; }
+</style>
+</head>
+<body>
+  <h2>Greenman Rich Menu — Preview</h2>
+  <canvas id="menu"></canvas><br>
+  <button onclick="download()">⬇️ ดาวน์โหลด PNG (2500x1686)</button>
+  <p class="note">ไฟล์จะถูกบันทึกลงโฟลเดอร์ Downloads ของคุณ — นำไปอัปโหลดที่ LINE Official Account Manager &gt; Rich menus ได้เลย</p>
+
+<script>
+function roundRect(c, x, y, w, h, r) {
+  if (typeof r === 'number') r = {tl:r, tr:r, br:r, bl:r};
+  c.beginPath();
+  c.moveTo(x + r.tl, y);
+  c.lineTo(x + w - r.tr, y);
+  c.arcTo(x + w, y, x + w, y + r.tr, r.tr);
+  c.lineTo(x + w, y + h - r.br);
+  c.arcTo(x + w, y + h, x + w - r.br, y + h, r.br);
+  c.lineTo(x + r.bl, y + h);
+  c.arcTo(x, y + h, x, y + h - r.bl, r.bl);
+  c.lineTo(x, y + r.tl);
+  c.arcTo(x, y, x + r.tl, y, r.tl);
+  c.closePath();
+}
+
+function drawBadge(ctx, cx, cy, color, drawIcon) {
+  const R = 150;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.18)';
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 8;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fill();
+  ctx.restore();
+  drawIcon(ctx, cx, cy, R * 1.15, color);
+}
+
+function drawClipboard(c, cx, cy, s, color) {
+  const w = s * 0.6, h = s * 0.72;
+  const x = cx - w / 2, y = cy - h / 2 + s * 0.03;
+  c.lineWidth = s * 0.045;
+  c.strokeStyle = color;
+  c.fillStyle = color;
+  roundRect(c, x, y, w, h, s * 0.08);
+  c.stroke();
+  const clipW = w * 0.42, clipH = s * 0.09;
+  roundRect(c, cx - clipW / 2, y - clipH * 0.55, clipW, clipH, clipH * 0.4);
+  c.fill();
+  c.lineWidth = s * 0.035;
+  const lineXs = x + w * 0.22;
+  const lineXe = x + w * 0.82;
+  [0.32, 0.5, 0.68].forEach((f) => {
+    const ly = y + h * f;
+    c.beginPath();
+    c.moveTo(lineXs, ly);
+    c.lineTo(lineXe, ly);
+    c.stroke();
+  });
+  c.beginPath();
+  c.arc(lineXs - s * 0.03, y + h * 0.32, s * 0.02, 0, Math.PI * 2);
+  c.fill();
+}
+
+function drawChatBubble(c, cx, cy, s, color) {
+  const w = s * 0.68, h = s * 0.52;
+  const x = cx - w / 2, y = cy - h / 2 - s * 0.03;
+  c.fillStyle = color;
+  roundRect(c, x, y, w, h, s * 0.16);
+  c.fill();
+  c.beginPath();
+  c.moveTo(x + w * 0.28, y + h);
+  c.lineTo(x + w * 0.18, y + h + s * 0.14);
+  c.lineTo(x + w * 0.42, y + h);
+  c.closePath();
+  c.fill();
+  c.fillStyle = '#FFFFFF';
+  const dotY = y + h / 2;
+  [-0.18, 0, 0.18].forEach((dx) => {
+    c.beginPath();
+    c.arc(cx + s * dx, dotY, s * 0.035, 0, Math.PI * 2);
+    c.fill();
+  });
+}
+
+function drawNotebook(c, cx, cy, s, color) {
+  const w = s * 0.55, h = s * 0.72;
+  const x = cx - w / 2, y = cy - h / 2 + s * 0.02;
+  c.fillStyle = color;
+  roundRect(c, x, y, w, h, s * 0.06);
+  c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.85)';
+  roundRect(c, x - s * 0.015, y, s * 0.09, h, s * 0.03);
+  c.fill();
+  c.fillStyle = color;
+  for (let i = 0; i < 4; i++) {
+    const ry = y + h * (0.15 + i * 0.24);
+    c.beginPath();
+    c.arc(x + s * 0.03, ry, s * 0.028, 0, Math.PI * 2);
+    c.fill();
+  }
+  c.strokeStyle = 'rgba(255,255,255,0.85)';
+  c.lineWidth = s * 0.03;
+  [0.32, 0.48, 0.64].forEach((f) => {
+    c.beginPath();
+    c.moveTo(x + w * 0.28, y + h * f);
+    c.lineTo(x + w * 0.85, y + h * f);
+    c.stroke();
+  });
+  c.save();
+  c.translate(cx + w * 0.28, cy - h * 0.05);
+  c.rotate(Math.PI / 4);
+  c.fillStyle = '#FFFFFF';
+  roundRect(c, -s * 0.05, -s * 0.28, s * 0.1, s * 0.5, s * 0.03);
+  c.fill();
+  c.beginPath();
+  c.moveTo(-s * 0.05, -s * 0.28);
+  c.lineTo(s * 0.05, -s * 0.28);
+  c.lineTo(0, -s * 0.4);
+  c.closePath();
+  c.fill();
+  c.restore();
+}
+
+function drawBell(c, cx, cy, s, color) {
+  c.fillStyle = color;
+  c.beginPath();
+  c.moveTo(cx - s * 0.32, cy + s * 0.22);
+  c.bezierCurveTo(cx - s * 0.32, cy - s * 0.05, cx - s * 0.28, cy - s * 0.38, cx, cy - s * 0.38);
+  c.bezierCurveTo(cx + s * 0.28, cy - s * 0.38, cx + s * 0.32, cy - s * 0.05, cx + s * 0.32, cy + s * 0.22);
+  c.lineTo(cx + s * 0.4, cy + s * 0.3);
+  c.lineTo(cx - s * 0.4, cy + s * 0.3);
+  c.closePath();
+  c.fill();
+  c.beginPath();
+  c.arc(cx, cy - s * 0.42, s * 0.05, 0, Math.PI * 2);
+  c.fill();
+  c.beginPath();
+  c.arc(cx, cy + s * 0.4, s * 0.06, 0, Math.PI * 2);
+  c.fill();
+}
+
+const canvas = document.getElementById('menu');
+canvas.width = 2500;
+canvas.height = 1686;
+const ctx = canvas.getContext('2d');
+
+const bg = ctx.createLinearGradient(0, 0, 0, canvas.height);
+bg.addColorStop(0, '#F3FBF0');
+bg.addColorStop(1, '#E7F6E4');
+ctx.fillStyle = bg;
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+const cells = [
+  { x: 0, y: 0, label: 'งาน', sub: 'TASKS', color: '#2E7D32', icon: drawClipboard },
+  { x: 1250, y: 0, label: 'ทั่วไป', sub: 'CHAT', color: '#00897B', icon: drawChatBubble },
+  { x: 0, y: 843, label: 'บันทึก', sub: 'NOTES', color: '#558B2F', icon: drawNotebook },
+  { x: 1250, y: 843, label: 'แจ้งเตือน', sub: 'ALERTS', color: '#EF6C00', icon: drawBell },
+];
+
+const cellW = 1250, cellH = 843, pad = 40;
+cells.forEach((cell) => {
+  const cardX = cell.x + pad, cardY = cell.y + pad;
+  const cardW = cellW - pad * 2, cardH = cellH - pad * 2;
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.12)';
+  ctx.shadowBlur = 20;
+  ctx.shadowOffsetY = 6;
+  roundRect(ctx, cardX, cardY, cardW, cardH, 48);
+  ctx.fillStyle = cell.color;
+  ctx.fill();
+  ctx.restore();
+
+  const cx = cardX + cardW / 2;
+  const cy = cardY + cardH * 0.36;
+  drawBadge(ctx, cx, cy, cell.color, cell.icon);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#FFFFFF';
+  ctx.font = "bold 76px 'Noto Sans Thai', 'Leelawadee UI', 'Tahoma', sans-serif";
+  ctx.fillText(cell.label, cx, cardY + cardH * 0.76);
+
+  ctx.font = "600 30px Arial, sans-serif";
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.fillText(cell.sub, cx, cardY + cardH * 0.86);
+});
+
+function download() {
+  const a = document.createElement('a');
+  a.download = 'greenman_richmenu.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+}
+</script>
+</body>
+</html>
