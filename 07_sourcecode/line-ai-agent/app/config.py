@@ -18,6 +18,15 @@ LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini").strip().lower()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
+# --- DeepSeek / OpenRouter (for chat fallback or non-Gemini primary) ---
+# For "free-style" usage, many teams use OpenRouter-compatible endpoints.
+# Set LLM_PROVIDER=deepseek and fill DEEPSEEK_API_KEY.
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", os.getenv("OPENROUTER_API_KEY", ""))
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://openrouter.ai/api/v1")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "openrouter/free")
+DEEPSEEK_SITE_URL = os.getenv("DEEPSEEK_SITE_URL", "")
+DEEPSEEK_APP_NAME = os.getenv("DEEPSEEK_APP_NAME", "greenman-line-agent")
+
 # --- dh-task (klive-tasks) ---
 KLIVE_API_URL = os.getenv("KLIVE_API_URL", "https://tasks.dohome.technology/api")
 KLIVE_TASKS_API_URL = os.getenv("KLIVE_TASKS_API_URL", "https://tasks.dohome.technology/api")

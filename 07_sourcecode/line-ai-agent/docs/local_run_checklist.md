@@ -8,7 +8,7 @@
 cd 07_sourcecode/line-ai-agent
 cp .env.example .env
 # แล้วแก้ค่าใน .env ให้ครบ โดยเฉพาะ LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, GEMINI_API_KEY
-# และตั้ง LLM_PROVIDER=gemini
+# และตั้ง LLM_PROVIDER=deepseek (หรือ gemini ตามที่ต้องการ)
 ```
 
 ## 2) ติดตั้งและรันเซิร์ฟเวอร์
@@ -54,4 +54,5 @@ ngrok http 8000
 ส่งข้อความ "สวัสดี" จากบัญชีที่ add OA แล้ว
 
 - ถ้า `GEMINI_API_KEY` ถูกต้อง จะได้คำตอบจาก AI
+- ถ้าใช้ DeepSeek/OpenRouter ให้ตั้ง `DEEPSEEK_API_KEY` และ `LLM_PROVIDER=deepseek`
 - ถ้า Gemini มีปัญหา ระบบควรตอบข้อความแจ้งเตือนแทน (ไม่ควรเงียบ)

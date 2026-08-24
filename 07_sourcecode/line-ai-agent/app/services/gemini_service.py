@@ -8,6 +8,8 @@ import json
 import os
 import time
 import datetime
+import urllib.request
+import urllib.error
 from zoneinfo import ZoneInfo
 
 from google import genai
@@ -28,6 +30,64 @@ def _is_quota_error(exc: Exception) -> bool:
         or "rate limit" in text
         or "quota" in text
     )
+
+
+def _deepseek_chat_once(user_message: str) -> str:
+    base = config.DEEPSEEK_BASE_URL.rstrip("/")
+    url = f"{base}/chat/completions"
+    payload = {
+        "model": config.DEEPSEEK_MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "คุณคือผู้ช่วยภาษาไทยของ Greenman LINE Bot ตอบสั้น กระชับ สุภาพ "
+                    "หากไม่แน่ใจให้บอกตามตรง"
+                ),
+            },
+            {"role": "user", "content": user_message},
+        ],
+        "temperature": 0.4,
+    }
+    body = json.dumps(payload).encode("utf-8")
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {config.DEEPSEEK_API_KEY}",
+    }
+    if config.DEEPSEEK_SITE_URL:
+        headers["HTTP-Referer"] = config.DEEPSEEK_SITE_URL
+    if config.DEEPSEEK_APP_NAME:
+        headers["X-Title"] = config.DEEPSEEK_APP_NAME
+
+    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=45) as response:
+        raw = response.read().decode("utf-8")
+    data = json.loads(raw)
+
+    choices = data.get("choices") or []
+    if not choices:
+        return "ขออภัยครับ ไม่สามารถสร้างคำตอบได้ในขณะนี้"
+    message = choices[0].get("message") or {}
+    text = message.get("content")
+    return text or "ขออภัยครับ ไม่สามารถสร้างคำตอบได้ในขณะนี้"
+
+
+def _ask_deepseek_sync(user_message: str, user_id: str) -> dict:
+    del user_id
+    if not config.DEEPSEEK_API_KEY:
+        return {
+            "text": "⚠️ ยังไม่ได้ตั้งค่า DEEPSEEK_API_KEY (หรือ OPENROUTER_API_KEY)",
+            "flex": None,
+        }
+    try:
+        text = _deepseek_chat_once(user_message)
+        return {"text": text, "flex": None}
+    except Exception as e:
+        if _is_quota_error(e):
+            print(f"⚠️ DeepSeek quota/rate-limit hit: {e}")
+            return {"text": _QUOTA_FALLBACK_TEXT, "flex": None}
+        return {"text": f"ขออภัยครับ เกิดข้อผิดพลาดทางเทคนิค: {str(e)}", "flex": None}
 
 # The dh-task team's own SKILL.md (same one they use for their own Claude
 # Code / Cursor setup) is the source of truth for which klive-tasks
@@ -439,6 +499,8 @@ async def get_gemini_response(user_message: str, user_id: str) -> dict:
     to attribute any destructive action (k-delete/k-update/etc.) held for
     confirmation to the right person."""
     import asyncio
+    if config.LLM_PROVIDER == "deepseek":
+        return await asyncio.to_thread(_ask_deepseek_sync, user_message, user_id)
     return await asyncio.to_thread(_ask_gemini_sync, user_message, user_id)
 
 
