@@ -32,25 +32,10 @@ def _is_quota_error(exc: Exception) -> bool:
     )
 
 
-def _deepseek_chat_once(user_message: str) -> str:
+def _deepseek_chat(payload: dict) -> dict:
     base = config.DEEPSEEK_BASE_URL.rstrip("/")
     url = f"{base}/chat/completions"
-    payload = {
-        "model": config.DEEPSEEK_MODEL,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "คุณคือผู้ช่วยภาษาไทยของ Greenman LINE Bot ตอบสั้น กระชับ สุภาพ "
-                    "หากไม่แน่ใจให้บอกตามตรง"
-                ),
-            },
-            {"role": "user", "content": user_message},
-        ],
-        "temperature": 0.4,
-    }
     body = json.dumps(payload).encode("utf-8")
-
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {config.DEEPSEEK_API_KEY}",
@@ -61,29 +46,184 @@ def _deepseek_chat_once(user_message: str) -> str:
         headers["X-Title"] = config.DEEPSEEK_APP_NAME
 
     req = urllib.request.Request(url, data=body, headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=45) as response:
-        raw = response.read().decode("utf-8")
-    data = json.loads(raw)
+    try:
+        with urllib.request.urlopen(req, timeout=45) as response:
+            raw = response.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        detail = ""
+        try:
+            body_text = e.read().decode("utf-8", errors="ignore")
+            detail = f" {body_text[:400]}"
+        except Exception:
+            pass
+        raise RuntimeError(f"HTTP {e.code}: {e.reason}.{detail}") from e
 
-    choices = data.get("choices") or []
-    if not choices:
-        return "ขออภัยครับ ไม่สามารถสร้างคำตอบได้ในขณะนี้"
-    message = choices[0].get("message") or {}
-    text = message.get("content")
-    return text or "ขออภัยครับ ไม่สามารถสร้างคำตอบได้ในขณะนี้"
+    return json.loads(raw)
+
+
+def _build_klive_tool_runtime(user_id: str):
+    captured = {}
+
+    def run_klive_command(command_args: list[str]) -> str:
+        subcommand = command_args[0] if command_args else ""
+        args = list(command_args)
+
+        if subcommand == "k-my-projects":
+            projects = klive_service.list_my_managed_projects()
+            captured["kind"] = "k-projects"
+            captured["data"] = projects
+            output = json.dumps(projects, ensure_ascii=False)
+            print(f"🔧 tool call: {args} -> {len(output)} chars")
+            return output
+
+        if subcommand in DESTRUCTIVE_SUBCOMMANDS:
+            summary_text = _build_confirmation_summary(subcommand, args)
+            action_id = pending_action_service.create_pending_action(user_id, args, summary_text)
+            captured["confirm_pending"] = {"action_id": action_id, "summary_text": summary_text}
+            print(f"🛑 Destructive action '{subcommand}' held for confirmation (action_id={action_id})")
+            return "รอการยืนยันจากผู้ใช้ก่อนดำเนินการ"
+
+        if subcommand in klive_service.RAW_CAPABLE_SUBCOMMANDS and "--raw" not in args:
+            args.append("--raw")
+
+        output = klive_service.run_klive(args)
+        print(f"🔧 tool call: {args} -> {len(output)} chars")
+
+        try:
+            data = json.loads(output)
+            captured["kind"] = subcommand
+            captured["data"] = data
+        except (json.JSONDecodeError, TypeError):
+            print(f"⚠️ Non-JSON output from '{subcommand}' (not captured for Flex): {output[:200]!r}")
+        return output
+
+    run_klive_command.__doc__ = (
+        "Execute a klive-tasks CLI command to manage tasks, projects, milestones, sprints, "
+        "or users in the dh-task system. `command_args` must be the subcommand followed by "
+        "its exact flags — only use the subcommands and flags listed below, never invent new ones. "
+        + KLIVE_SKILL_DOC
+    )
+    return captured, run_klive_command
+
+
+def _postprocess_tool_result(captured: dict, text: str) -> dict:
+    if "confirm_pending" in captured:
+        return {"confirm_pending": captured["confirm_pending"]}
+
+    flex = None
+    if "data" in captured:
+        try:
+            flex = flex_builder.build_flex_for(
+                captured["kind"], captured["data"], resolve_user=klive_service.resolve_user_name
+            )
+        except Exception as e:
+            print(f"⚠️ Flex build error for kind={captured.get('kind')}: {e}")
+
+    return {"text": text or "เรียบร้อยครับ", "flex": flex}
 
 
 def _ask_deepseek_sync(user_message: str, user_id: str) -> dict:
-    del user_id
     if not config.DEEPSEEK_API_KEY:
         return {
             "text": "⚠️ ยังไม่ได้ตั้งค่า DEEPSEEK_API_KEY (หรือ OPENROUTER_API_KEY)",
             "flex": None,
         }
+
+    captured, run_klive_command = _build_klive_tool_runtime(user_id)
+    self_user_id = klive_service.resolve_self_user_id()
+    self_instruction = (
+        f"ถ้าผู้ใช้พูดถึงตัวเองให้ใช้ user_id={self_user_id} เป็น --assignee ได้ทันที\n"
+        "และถ้าถามโปรเจกต์ที่ตัวเองดูแลให้เรียก k-my-projects\n"
+        if self_user_id else ""
+    )
+    system_instruction = (
+        "คุณคือ Greenman ผู้ช่วยจัดการงาน dh-task ทาง LINE ตอบภาษาไทยสุภาพสั้นกระชับ\n"
+        "คำถามเกี่ยวกับข้อมูลจริงใน dh-task ต้องเรียก run_klive_command ก่อนเสมอ ห้ามเดา\n"
+        f"{self_instruction}"
+    )
+
+    tool_spec = {
+        "type": "function",
+        "function": {
+            "name": "run_klive_command",
+            "description": run_klive_command.__doc__ or "Run klive command",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command_args": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "subcommand and flags, e.g. ['k-list','--status','todo']",
+                    }
+                },
+                "required": ["command_args"],
+            },
+        },
+    }
+
+    messages = [
+        {"role": "system", "content": system_instruction},
+        {"role": "user", "content": user_message},
+    ]
+
+    payload = {
+        "model": config.DEEPSEEK_MODEL,
+        "messages": messages,
+        "tools": [tool_spec],
+        "temperature": 0.3,
+    }
+    if _looks_like_data_question(user_message):
+        payload["tool_choice"] = {"type": "function", "function": {"name": "run_klive_command"}}
+
     try:
-        text = _deepseek_chat_once(user_message)
-        return {"text": text, "flex": None}
+        first = _deepseek_chat(payload)
+        choices = first.get("choices") or []
+        if not choices:
+            return {"text": "ขออภัยครับ ไม่สามารถสร้างคำตอบได้ในขณะนี้", "flex": None}
+
+        first_message = choices[0].get("message") or {}
+        tool_calls = first_message.get("tool_calls") or []
+        if not tool_calls:
+            return {"text": first_message.get("content") or "เรียบร้อยครับ", "flex": None}
+
+        messages.append(first_message)
+        for tc in tool_calls:
+            fn = (tc.get("function") or {}).get("name", "")
+            arg_text = (tc.get("function") or {}).get("arguments") or "{}"
+            try:
+                parsed = json.loads(arg_text)
+            except Exception:
+                parsed = {}
+            command_args = parsed.get("command_args") or []
+            if fn != "run_klive_command":
+                tool_result = "unsupported tool"
+            else:
+                tool_result = run_klive_command(command_args)
+
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc.get("id", ""),
+                    "content": tool_result,
+                }
+            )
+
+        second = _deepseek_chat(
+            {
+                "model": config.DEEPSEEK_MODEL,
+                "messages": messages,
+                "temperature": 0.3,
+            }
+        )
+        second_choices = second.get("choices") or []
+        final_text = "เรียบร้อยครับ"
+        if second_choices:
+            final_text = (second_choices[0].get("message") or {}).get("content") or final_text
+        return _postprocess_tool_result(captured, final_text)
     except Exception as e:
+        text = str(e).lower()
+        if "401" in text or "unauthorized" in text:
+            return {"text": "ขออภัยครับ คีย์ของผู้ให้บริการ AI ไม่ถูกต้องหรือหมดอายุ (401)", "flex": None}
         if _is_quota_error(e):
             print(f"⚠️ DeepSeek quota/rate-limit hit: {e}")
             return {"text": _QUOTA_FALLBACK_TEXT, "flex": None}
@@ -215,11 +355,9 @@ def _build_confirmation_summary(subcommand: str, command_args: list[str]) -> str
     return "ต้องการดำเนินการนี้ใช่ไหมครับ?"
 
 gemini_client = None
-if config.LLM_PROVIDER != "gemini":
-    print(f"⚠️ Unsupported LLM_PROVIDER={config.LLM_PROVIDER!r}; currently only 'gemini' is implemented.")
-elif config.GEMINI_API_KEY:
+if config.LLM_PROVIDER == "gemini" and config.GEMINI_API_KEY:
     gemini_client = genai.Client(api_key=config.GEMINI_API_KEY)
-else:
+elif config.LLM_PROVIDER == "gemini":
     print("⚠️ Warning: GEMINI_API_KEY is not set. AI features will be unavailable.")
 
 
